@@ -1,0 +1,13 @@
+fastapi
+uvicorn
+llama-index
+pydantic
+python-dotenv
+beautifulsoup4
+pandas
+PyPDF2
+prometheus-client
+requests
+langchain
+google-generativeai
+schedule

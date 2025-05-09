@@ -1,3 +1,10 @@
 .env
-TODO.md
+TODO
+folder_structure
+projekt_ide
+context.md
+venv/
+manuel_context
+gemini-test.py
+data/
 
