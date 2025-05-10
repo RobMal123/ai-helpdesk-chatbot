@@ -5,24 +5,37 @@ Test the FastAPI endpoints
 import pytest
 from fastapi.testclient import TestClient
 from unittest.mock import patch, MagicMock
+import os
+
+# Mock environment variables
+TEST_ENV = {
+    "GEMINI_API_KEY": "test_api_key",
+    "GEMINI_MODEL": "test-model",
+    "APP_HOST": "127.0.0.1",
+    "APP_PORT": "8000",
+    "DEBUG": "True",
+}
 
 
 # Mock the Chatbot class to avoid needing actual dependencies
 @pytest.fixture
 def mock_chatbot():
-    with patch("app.main.Chatbot") as mock:
-        # Configure the mock to return predictable responses
-        mock_instance = MagicMock()
-        mock_instance.get_response.return_value = {
-            "answer": "Test answer",
-            "sources": "Test sources",
-            "response_time": 0.1,
-        }
-        mock_instance.refresh_knowledge.return_value = "Index refreshed successfully"
+    with patch.dict(os.environ, TEST_ENV):
+        with patch("app.main.Chatbot") as mock:
+            # Configure the mock to return predictable responses
+            mock_instance = MagicMock()
+            mock_instance.get_response.return_value = {
+                "answer": "Test answer",
+                "sources": "Test sources",
+                "response_time": 0.1,
+            }
+            mock_instance.refresh_knowledge.return_value = (
+                "Index refreshed successfully"
+            )
 
-        # Make the mock constructor return our configured mock instance
-        mock.return_value = mock_instance
-        yield mock
+            # Make the mock constructor return our configured mock instance
+            mock.return_value = mock_instance
+            yield mock
 
 
 def test_root_endpoint():
