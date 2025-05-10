@@ -1,6 +1,6 @@
 fastapi
 uvicorn
-llama-index==0.9.1
+llama-index
 pydantic
 python-dotenv
 beautifulsoup4
@@ -10,7 +10,7 @@ prometheus-client
 requests
 langchain
 langchain-community
-openai==1.1.0
+openai
 google-generativeai
 schedule
 # Testing dependencies
