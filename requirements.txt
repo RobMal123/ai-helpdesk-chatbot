@@ -8,7 +8,8 @@ pandas
 PyPDF2
 prometheus-client
 requests
-langchain
+langchain==0.0.267
+langchain-community==0.0.10
 google-generativeai
 schedule
 # Testing dependencies
