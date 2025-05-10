@@ -3,16 +3,53 @@ import time
 from app.vector_store import VectorStore
 from app.config import GEMINI_API_KEY, GEMINI_MODEL
 import google.generativeai as genai
-from prometheus_client import Histogram
+from prometheus_client import Histogram, REGISTRY
 
 # Setup logging
 logger = logging.getLogger(__name__)
 
-# Prometheus metrics for response time
-RESPONSE_TIME = Histogram(
-    "chatbot_response_time_seconds", "Time spent generating chatbot response"
-)
-TOKEN_USAGE = Histogram("chatbot_token_usage", "Number of tokens used per request")
+# Flag to track if metrics have been initialized
+_metrics_initialized = False
+
+# Metrics placeholders
+RESPONSE_TIME = None
+TOKEN_USAGE = None
+
+
+def initialize_metrics():
+    """Initialize Prometheus metrics if not already done"""
+    global RESPONSE_TIME, TOKEN_USAGE, _metrics_initialized
+
+    if _metrics_initialized:
+        return
+
+    # Check if metrics already exist in registry to avoid duplicates
+    existing_metrics = [m.name for m in REGISTRY._names_to_collectors.values()]
+
+    # Only create metrics if they don't already exist
+    if "chatbot_response_time_seconds" not in existing_metrics:
+        RESPONSE_TIME = Histogram(
+            "chatbot_response_time_seconds", "Time spent generating chatbot response"
+        )
+    else:
+        # Get existing metric from registry
+        RESPONSE_TIME = REGISTRY._names_to_collectors.get(
+            "chatbot_response_time_seconds"
+        )
+
+    if "chatbot_token_usage" not in existing_metrics:
+        TOKEN_USAGE = Histogram(
+            "chatbot_token_usage", "Number of tokens used per request"
+        )
+    else:
+        # Get existing metric from registry
+        TOKEN_USAGE = REGISTRY._names_to_collectors.get("chatbot_token_usage")
+
+    _metrics_initialized = True
+
+
+# Initialize metrics
+initialize_metrics()
 
 
 class Chatbot:
@@ -31,7 +68,6 @@ class Chatbot:
                 "No Gemini API key found. Chatbot will not be able to generate responses."
             )
 
-    @RESPONSE_TIME.time()
     def get_response(self, query, conversation_history=None):
         """Generate a response to the user query using RAG."""
         if conversation_history is None:
@@ -80,7 +116,8 @@ class Chatbot:
             # Extract token usage - Gemini doesn't provide token count directly
             # We'll estimate based on characters
             estimated_tokens = len(prompt) / 4  # Rough estimate
-            TOKEN_USAGE.observe(estimated_tokens)
+            if TOKEN_USAGE:
+                TOKEN_USAGE.observe(estimated_tokens)
             logger.info(f"Estimated token usage: {estimated_tokens}")
 
             answer = response.text
