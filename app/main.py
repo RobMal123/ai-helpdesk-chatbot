@@ -38,8 +38,14 @@ if ENABLE_METRICS:
     app.mount("/metrics", metrics_app)
     logger.info("Prometheus metrics enabled at /metrics endpoint")
 
-# Create a singleton chatbot instance
-chatbot = Chatbot()
+
+# Function to get or create a chatbot instance
+# This makes it easier to mock in tests
+def get_chatbot():
+    # Create a singleton chatbot instance
+    if not hasattr(get_chatbot, "instance") or get_chatbot.instance is None:
+        get_chatbot.instance = Chatbot()
+    return get_chatbot.instance
 
 
 # Define request and response models
@@ -68,7 +74,7 @@ async def root():
 
 
 @app.post("/chat", response_model=ChatResponse)
-async def chat(request: ChatRequest):
+async def chat(request: ChatRequest, chatbot: Chatbot = Depends(get_chatbot)):
     """Process a chat request and return the response."""
     logger.info(f"Received chat request: {request.query}")
     start_time = time.time()
@@ -93,7 +99,9 @@ async def health_check():
 
 
 @app.post("/refresh")
-async def refresh_knowledge(background_tasks: BackgroundTasks):
+async def refresh_knowledge(
+    background_tasks: BackgroundTasks, chatbot: Chatbot = Depends(get_chatbot)
+):
     """Refresh the knowledge base in the background."""
     logger.info("Knowledge base refresh requested")
     background_tasks.add_task(chatbot.refresh_knowledge)

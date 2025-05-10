@@ -2,6 +2,7 @@
 Test the FastAPI endpoints
 """
 
+import sys
 import pytest
 from fastapi.testclient import TestClient
 from unittest.mock import patch, MagicMock
@@ -17,58 +18,86 @@ TEST_ENV = {
 }
 
 
-# Mock the Chatbot class to avoid needing actual dependencies
+# Remove modules from cache to ensure fresh imports
+def teardown_module():
+    """Remove modules from cache after tests to ensure fresh imports"""
+    modules_to_remove = ["app.main", "app.chatbot", "app.config", "app.vector_store"]
+    for module in list(sys.modules.keys()):
+        if any(module.startswith(prefix) for prefix in modules_to_remove):
+            del sys.modules[module]
+
+
 @pytest.fixture
-def mock_chatbot():
-    with patch.dict(os.environ, TEST_ENV):
-        with patch("app.main.Chatbot") as mock:
-            # Configure the mock to return predictable responses
-            mock_instance = MagicMock()
-            mock_instance.get_response.return_value = {
-                "answer": "Test answer",
-                "sources": "Test sources",
-                "response_time": 0.1,
-            }
-            mock_instance.refresh_knowledge.return_value = (
-                "Index refreshed successfully"
-            )
+def clean_environment():
+    """Clean environment variables and module cache before test"""
+    # Remove modules from cache to ensure fresh import
+    for module in list(sys.modules.keys()):
+        if module.startswith("app."):
+            del sys.modules[module]
 
-            # Make the mock constructor return our configured mock instance
-            mock.return_value = mock_instance
-            yield mock
+    # Apply environment variables
+    with patch.dict(os.environ, TEST_ENV, clear=True):
+        yield
 
 
-def test_root_endpoint():
+# Create a mock chatbot that returns predictable responses
+@pytest.fixture
+def mock_chatbot_instance():
+    mock = MagicMock()
+    mock.get_response.return_value = {
+        "answer": "Test answer",
+        "sources": "Test sources",
+        "response_time": 0.1,
+    }
+    mock.refresh_knowledge.return_value = "Index refreshed successfully"
+    return mock
+
+
+# Mock the get_chatbot function to return our mock instance
+@pytest.fixture
+def override_get_chatbot(mock_chatbot_instance, clean_environment):
+    # Import here after environment is set up
+    from app.main import app, get_chatbot
+
+    # Override the get_chatbot dependency
+    app.dependency_overrides[get_chatbot] = lambda: mock_chatbot_instance
+
+    # Return app with dependency override
+    yield app
+
+    # Clean up after test
+    app.dependency_overrides.clear()
+
+
+def test_root_endpoint(clean_environment):
     """Test the root endpoint returns expected data"""
-    with patch("app.main.Chatbot"):
-        from app.main import app
-
-        client = TestClient(app)
-        response = client.get("/")
-
-        assert response.status_code == 200
-        assert "message" in response.json()
-        assert "endpoints" in response.json()
-
-
-def test_health_endpoint():
-    """Test the health endpoint returns healthy status"""
-    with patch("app.main.Chatbot"):
-        from app.main import app
-
-        client = TestClient(app)
-        response = client.get("/health")
-
-        assert response.status_code == 200
-        assert response.json()["status"] == "healthy"
-        assert "timestamp" in response.json()
-
-
-def test_chat_endpoint(mock_chatbot):
-    """Test the chat endpoint returns response from chatbot"""
+    # Import after environment is set up
     from app.main import app
 
     client = TestClient(app)
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert "message" in response.json()
+    assert "endpoints" in response.json()
+
+
+def test_health_endpoint(clean_environment):
+    """Test the health endpoint returns healthy status"""
+    # Import after environment is set up
+    from app.main import app
+
+    client = TestClient(app)
+    response = client.get("/health")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "healthy"
+    assert "timestamp" in response.json()
+
+
+def test_chat_endpoint(override_get_chatbot, mock_chatbot_instance):
+    """Test the chat endpoint returns response from chatbot"""
+    client = TestClient(override_get_chatbot)
 
     # Test with minimal input
     response = client.post("/chat", json={"query": "test question"})
@@ -79,16 +108,12 @@ def test_chat_endpoint(mock_chatbot):
     assert response.json()["response_time"] == 0.1
 
     # Verify the mock was called correctly
-    mock_chatbot.return_value.get_response.assert_called_once_with(
-        "test question", None
-    )
+    mock_chatbot_instance.get_response.assert_called_once_with("test question", None)
 
 
-def test_chat_endpoint_with_history(mock_chatbot):
+def test_chat_endpoint_with_history(override_get_chatbot, mock_chatbot_instance):
     """Test the chat endpoint with conversation history"""
-    from app.main import app
-
-    client = TestClient(app)
+    client = TestClient(override_get_chatbot)
 
     # Test with conversation history
     history = [
@@ -103,6 +128,6 @@ def test_chat_endpoint_with_history(mock_chatbot):
     assert response.status_code == 200
 
     # Verify the history was passed correctly
-    mock_chatbot.return_value.get_response.assert_called_once_with(
+    mock_chatbot_instance.get_response.assert_called_once_with(
         "follow-up question", history
     )

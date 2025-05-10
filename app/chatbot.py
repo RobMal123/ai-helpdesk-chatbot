@@ -5,9 +5,6 @@ from app.config import GEMINI_API_KEY, GEMINI_MODEL
 import google.generativeai as genai
 from prometheus_client import Histogram
 
-# Configure Gemini API
-genai.configure(api_key=GEMINI_API_KEY)
-
 # Setup logging
 logger = logging.getLogger(__name__)
 
@@ -22,8 +19,17 @@ class Chatbot:
     def __init__(self):
         """Initialize the chatbot with vector store for RAG."""
         self.vector_store = VectorStore()
-        self.model = genai.GenerativeModel(GEMINI_MODEL)
-        logger.info("Chatbot initialized with RAG capabilities using Gemini")
+
+        # Only configure Gemini if API key is available
+        if GEMINI_API_KEY:
+            genai.configure(api_key=GEMINI_API_KEY)
+            self.model = genai.GenerativeModel(GEMINI_MODEL)
+            logger.info("Chatbot initialized with RAG capabilities using Gemini")
+        else:
+            self.model = None
+            logger.warning(
+                "No Gemini API key found. Chatbot will not be able to generate responses."
+            )
 
     @RESPONSE_TIME.time()
     def get_response(self, query, conversation_history=None):
@@ -35,6 +41,10 @@ class Chatbot:
         logger.info(f"Processing query: {query}")
 
         try:
+            # Check if API key is available
+            if not GEMINI_API_KEY:
+                raise ValueError("Gemini API key not found in environment variables")
+
             # Get relevant context from vector store
             rag_context = self.vector_store.query(query)
             context_str = str(rag_context)
