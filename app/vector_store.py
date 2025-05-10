@@ -1,9 +1,9 @@
-from llama_index.core import (
+from llama_index import (
+    SimpleDirectoryReader,
     VectorStoreIndex,
     StorageContext,
     load_index_from_storage,
 )
-from llama_index.readers.file import SimpleDirectoryReader
 import os
 import logging
 from app.config import VECTOR_STORE_DIR, PDF_PROCESSED_DIR
