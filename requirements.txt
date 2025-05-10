@@ -10,6 +10,7 @@ prometheus-client
 requests
 langchain
 langchain-community
+openai
 google-generativeai
 schedule
 # Testing dependencies
