@@ -24,7 +24,10 @@ def initialize_metrics():
         return
 
     # Check if metrics already exist in registry to avoid duplicates
-    existing_metrics = [m.name for m in REGISTRY._names_to_collectors.values()]
+    existing_metrics = set()
+    for collector in REGISTRY._names_to_collectors.values():
+        if hasattr(collector, "name"):
+            existing_metrics.add(collector.name)
 
     # Only create metrics if they don't already exist
     if "chatbot_response_time_seconds" not in existing_metrics:
@@ -32,18 +35,25 @@ def initialize_metrics():
             "chatbot_response_time_seconds", "Time spent generating chatbot response"
         )
     else:
-        # Get existing metric from registry
-        RESPONSE_TIME = REGISTRY._names_to_collectors.get(
-            "chatbot_response_time_seconds"
-        )
+        # Find existing metric from registry
+        for collector in REGISTRY._names_to_collectors.values():
+            if (
+                hasattr(collector, "name")
+                and collector.name == "chatbot_response_time_seconds"
+            ):
+                RESPONSE_TIME = collector
+                break
 
     if "chatbot_token_usage" not in existing_metrics:
         TOKEN_USAGE = Histogram(
             "chatbot_token_usage", "Number of tokens used per request"
         )
     else:
-        # Get existing metric from registry
-        TOKEN_USAGE = REGISTRY._names_to_collectors.get("chatbot_token_usage")
+        # Find existing metric from registry
+        for collector in REGISTRY._names_to_collectors.values():
+            if hasattr(collector, "name") and collector.name == "chatbot_token_usage":
+                TOKEN_USAGE = collector
+                break
 
     _metrics_initialized = True
 

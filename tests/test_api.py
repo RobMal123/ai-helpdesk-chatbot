@@ -7,7 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 from unittest.mock import patch, MagicMock
 import os
-from prometheus_client import REGISTRY, CollectorRegistry
+from prometheus_client import REGISTRY
 
 # Mock environment variables
 TEST_ENV = {
@@ -17,6 +17,29 @@ TEST_ENV = {
     "APP_PORT": "8000",
     "DEBUG": "True",
 }
+
+
+# Mock for Prometheus metrics
+@pytest.fixture(autouse=True)
+def mock_prometheus():
+    """Mock Prometheus metrics for all tests"""
+    with patch("prometheus_client.Histogram") as mock_histogram:
+        # Make Histogram return a MagicMock with required methods
+        mock_instance = MagicMock()
+        mock_instance.observe = MagicMock()
+        mock_instance.time.return_value = (
+            lambda x: x
+        )  # Make time() return a pass-through decorator
+        mock_histogram.return_value = mock_instance
+
+        # Also patch the registry
+        original_dict = REGISTRY._names_to_collectors
+        REGISTRY._names_to_collectors = {}
+
+        yield
+
+        # Restore original registry
+        REGISTRY._names_to_collectors = original_dict
 
 
 # Remove modules from cache to ensure fresh imports
@@ -36,15 +59,9 @@ def clean_environment():
         if module.startswith("app."):
             del sys.modules[module]
 
-    # Patch Prometheus registry
-    original_registry = REGISTRY._names_to_collectors.copy()
-
     # Apply environment variables
     with patch.dict(os.environ, TEST_ENV, clear=True):
         yield
-
-    # Restore Prometheus registry state
-    REGISTRY._names_to_collectors = original_registry
 
 
 # Create a mock chatbot that returns predictable responses
@@ -64,14 +81,13 @@ def mock_chatbot_instance():
 @pytest.fixture
 def override_get_chatbot(mock_chatbot_instance, clean_environment):
     # Import here after environment is set up
-    with patch("prometheus_client.Histogram"):
-        from app.main import app, get_chatbot
+    from app.main import app, get_chatbot
 
-        # Override the get_chatbot dependency
-        app.dependency_overrides[get_chatbot] = lambda: mock_chatbot_instance
+    # Override the get_chatbot dependency
+    app.dependency_overrides[get_chatbot] = lambda: mock_chatbot_instance
 
-        # Return app with dependency override
-        yield app
+    # Return app with dependency override
+    yield app
 
     # Clean up after test
     app.dependency_overrides.clear()
@@ -80,29 +96,27 @@ def override_get_chatbot(mock_chatbot_instance, clean_environment):
 def test_root_endpoint(clean_environment):
     """Test the root endpoint returns expected data"""
     # Import after environment is set up
-    with patch("prometheus_client.Histogram"):
-        from app.main import app
+    from app.main import app
 
-        client = TestClient(app)
-        response = client.get("/")
+    client = TestClient(app)
+    response = client.get("/")
 
-        assert response.status_code == 200
-        assert "message" in response.json()
-        assert "endpoints" in response.json()
+    assert response.status_code == 200
+    assert "message" in response.json()
+    assert "endpoints" in response.json()
 
 
 def test_health_endpoint(clean_environment):
     """Test the health endpoint returns healthy status"""
     # Import after environment is set up
-    with patch("prometheus_client.Histogram"):
-        from app.main import app
+    from app.main import app
 
-        client = TestClient(app)
-        response = client.get("/health")
+    client = TestClient(app)
+    response = client.get("/health")
 
-        assert response.status_code == 200
-        assert response.json()["status"] == "healthy"
-        assert "timestamp" in response.json()
+    assert response.status_code == 200
+    assert response.json()["status"] == "healthy"
+    assert "timestamp" in response.json()
 
 
 def test_chat_endpoint(override_get_chatbot, mock_chatbot_instance):
